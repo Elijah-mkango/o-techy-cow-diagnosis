@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cattle Advisor & Disease Finder (Malawi)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body{
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: url('COW2.JPG') no-repeat center center fixed;
+      background-size: cover;
+      color: #1a202c;
+    }
+    h1 { color: #2c5282; text-align:center; }
+
+    label { display: block; margin-top: 15px; font-weight: bold; }
+
+    /* Breed Image Grid */
+    #breedGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 15px;
+      margin-top: 10px;
+      max-width: 900px;
+    }
+    .breedCard {
+      border: 2px solid transparent;
+      border-radius: 10px;
+      padding: 5px;
+      text-align: center;
+      cursor: pointer;
+      background: rgba(255,255,255,0.7);
+      transition: 0.3s;
+    }
+    .breedCard img {
+      width: 100%;
+      height: 100px;
+      object-fit: cover;
+      border-radius: 10px;
+    }
+    .breedCard:hover { border-color: #2c5282; }
+    .breedCard.selected { border-color: #38a169; background: rgba(200,255,200,0.7); }
+
+    /* Symptoms Box */
+    .symptoms {
+      margin-top: 10px;
+      padding: 15px;
+      border-radius:10px;
+      border: 1px solid #cbd5e0;
+      background: rgba(255,255,255,0.7);
+      max-width: 700px;
+    }
+    .symptoms label {
+      font-weight: normal;
+      display: block;
+      margin: 5px 0;
+    }
+
+    /* Output Boxes */
+    .output {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius:10px;
+      border: 1px solid #cbd5e0;
+      background: #edf2f7;
+      max-width: 700px;
+    }
+    strong { color: #2c5282; }
+
+    /* Buttons */
+    button {
+      width: 100%;
+      max-width: 500px;
+      padding: 8px;
+      margin-top: 10px;
+      border-radius:5px;
+      border:none;
+      background:#2c5282;
+      color:#fff;
+      cursor:pointer;
+      transition:0.3s;
+    }
+    button:hover { background:#2b6cb0; }
+
+    .download-btn { background:#38a169; }
+    .download-btn:hover { background:#2f855a; }
+
+    hr { margin: 25px 0; border: 0; border-top: 1px solid #cbd5e0; }
+  </style>
+</head>
+<body>
+
+<h1>OTECHY Cattle Advisor & Disease Finder (Malawi)</h1>
+
+<label for="langSelect">Language / Chiyankhulo:</label>
+<select id="langSelect" onchange="setLanguage()">
+  <option value="en">English</option>
+  <option value="ny">Chichewa</option>
+</select>
+
+<!-- Breed Visual Selection -->
+<label>Select Breed(s) / Sankhani mtundu wa ng'ombe:</label>
+<div id="breedGrid"></div>
+<div class="output" id="breedOutput"></div>
+
+<hr>
+
+<!-- Disease Finder -->
+<label>Select observed symptoms / Sankhani zizindikiro zomwe mwaziona:</label>
+<div class="symptoms" id="symptomBox"></div>
+
+<button onclick="findDisease()">Find Disease / Pezani Matenda</button>
+<button onclick="resetForm()">Reset / Bwezeretsani</button>
+<button class="download-btn" onclick="downloadPDF()">📄 Download PDF</button>
+
+<div class="output" id="diseaseOutput"></div>
+
+<script>
+// ------------------- BREED DATA -------------------
+const breedData = {
+  en: {
+    "Malawi Zebu / Angoni": "Best for smallholders. Survives on natural grazing, resistant to ticks and diseases. Improve productivity via crossbreeding. Low milk yield, slow beef growth.",
+    "Nkone": "Small hardy Zebu. Survives poor pasture. Disease and tick resistant. Low milk yield.",
+    "Friesian / Holstein": "High milk producer. Requires good feed, clean water, shade, and vaccination. Sensitive to heat and diseases.",
+    "Jersey": "Good for smallholder dairy. High butterfat milk. Needs moderate feed. Heat-tolerant.",
+    "Ayrshire": "Medium dairy breed. Strong grazer, moderate feed, good udder health.",
+    "Brahman": "Beef breed. Heat and tick resistant. Good for crossbreeding. Needs pasture space.",
+    "Boran": "Beef breed. Fast-growing, hardy. Crossbreed with Zebu for improved beef.",
+    "Crossbreeds (Zebu × Friesian/Jersey/Brahman)": "Best balance of production and disease resistance. Keep breeding records. Ideal for smallholders."
+  },
+  ny: {
+    "Malawi Zebu / Angoni": "Oyenera alimi ang’ono. Amatha kudya patsogolo, amakhala ndi chitetezo ku tizilombo ndi matenda. Kuonjezera kupanga bwino pogwiritsa ntchito kuchiritsa m’paka. Mkaka wochepa, nyama ikukula pang’onopang’ono.",
+    "Nkone": "Zebu yaying’ono yolemera. Imatha kudya m’patsogolo. Chitetezo cha matenda ndi tizilombo. Mkaka wochepa.",
+    "Friesian / Holstein": "Imapereka mkaka wambiri. Iyenera kudyetsedwa bwino, madzi oyera, malo ozizira, ndi katemera. Sangalalani ndi kutentha ndi matenda.",
+    "Jersey": "Oyenera alimi ang’ono. Mkaka wokhala ndi mafuta ambiri. Iyenera kudyetsedwa pang’ono. Amatha kutentha bwino.",
+    "Ayrshire": "Ng’ombe yamkati. Imatha kudya bwino, pang’ono feed, thanzi la udder labwino.",
+    "Brahman": "Ng’ombe ya nyama. Imakhala ndi chitetezo ku kutentha ndi tizilombo. Yabwino pogwiritsa ntchito kuchiritsa. Iyenera kudyetsa pa nsanja.",
+    "Boran": "Ng’ombe ya nyama. Ikukula mwachangu, yolemera. Chirikizani ndi Zebu kuti nyama ikule bwino.",
+    "Crossbreeds (Zebu × Friesian/Jersey/Brahman)": "Mlingo wabwino pakati pa kupanga mkaka/nyama ndi chitetezo cha matenda. Sungani mbewu. Oyenera alimi ang’ono."
+  }
+};
+
+// Example breed images (replace with real images)
+const breedImages = {
+  "Malawi Zebu / Angoni":"angoni.jpg",
+  "Nkone":"nkone.jpg",
+  "Friesian / Holstein":"freisian.jpg",
+  "Jersey":"jersey.jpg",
+  "Ayrshire":"ayrshire.jpg",
+  "Brahman":"brahman.jpg",
+  "Boran":"boran.jpg",
+  "Crossbreeds (Zebu × Friesian/Jersey/Brahman)":"crossbreed.jpg"
+};
+
+// ------------------- DISEASE DATA -------------------
+const diseaseData = {
+  en: [
+    { symptoms:["Fever","Coughing","Nasal discharge","Labored breathing"], disease:"Bovine Respiratory Disease (Shipping Fever)", treatment:"Antibiotics, anti-inflammatories, supportive care", medicine:"Oxytetracycline, Florfenicol, Penicillin, Multivitamins" },
+    { symptoms:["Swollen udder","Clots in milk","Reduced milk"], disease:"Mastitis", treatment:"Intramammary antibiotics, milking hygiene", medicine:"Penicillin-Streptomycin, Mastitis tubes, Anti-inflammatory drugs" },
+    { symptoms:["Blisters in mouth","Blisters on feet","Drooling","Lameness"], disease:"Foot and Mouth Disease (FMD)", treatment:"Isolation, supportive care, vaccination", medicine:"No specific cure, Pain relievers, Antibiotics to prevent infection" },
+    { symptoms:["Sudden death","Bleeding from openings","High fever"], disease:"Anthrax", treatment:"URGENT veterinary intervention", medicine:"Penicillin (early stages only) – DO NOT open carcass" },
+    { symptoms:["Nodules on skin","Fever","Reduced milk"], disease:"Lumpy Skin Disease", treatment:"Supportive care, insect control", medicine:"Antibiotics to prevent secondary infection, Vitamins" }
+  ],
+  ny: [
+    { symptoms:["Kutentha thupi","Kukhosomola","Mphuno kutuluka","Kupuma movuta"], disease:"Matenda a kupuma (Shipping Fever)", treatment:"Maantibayotiki, chisamaliro", medicine:"Oxytetracycline, Penicillin, Vitamini" },
+    { symptoms:["Bere lotupa","Ma clot mu mkaka","Mkaka kuchepa"], disease:"Mastitis", treatment:"Mankhwala a bere, ukhondo", medicine:"Penicillin-Streptomycin, Mastitis tubes" },
+    { symptoms:["Mabala mkamwa","Mabala mapazi","Malovu ochuluka","Kulephera kuyenda"], disease:"Matenda a FMD", treatment:"Kusungitsa ng’ombe payekha, katemera", medicine:"Palibe mankhwala enieni, mankhwala ochepetsa ululu" },
+    { symptoms:["Imfa mwadzidzidzi","Magazi kutuluka","Kutentha thupi"], disease:"Anthrax", treatment:"Fotokozani kwa vet mwamsanga", medicine:"Penicillin (ngati mwapezeka msanga), OSATSEGULA MTEMBO" },
+    { symptoms:["Ziphuphu pa khungu","Kutentha thupi","Mkaka kuchepa"], disease:"Lumpy Skin Disease", treatment:"Chisamaliro, kupewa tizilombo", medicine:"Maantibayotiki oteteza matenda ena, vitamini" }
+  ]
+};
+
+let currentLang = "en";
+let selectedBreeds = new Set();
+
+// ------------------- FUNCTIONS -------------------
+function setLanguage(){
+  currentLang=document.getElementById("langSelect").value;
+  renderBreedGrid();
+  renderSymptoms();
+  document.getElementById("breedOutput").innerHTML="";
+  document.getElementById("diseaseOutput").innerHTML="";
+}
+
+function renderBreedGrid(){
+  const grid=document.getElementById("breedGrid");
+  grid.innerHTML="";
+  selectedBreeds.clear();
+  for(const breed in breedData[currentLang]){
+    const card=document.createElement("div");
+    card.className="breedCard";
+    card.innerHTML=`<img src="${breedImages[breed]}" alt="${breed}"><div>${breed}</div>`;
+    card.onclick=()=>{
+      if(selectedBreeds.has(breed)){
+        selectedBreeds.delete(breed);
+        card.classList.remove("selected");
+      } else {
+        selectedBreeds.add(breed);
+        card.classList.add("selected");
+      }
+      showBreedAdvice();
+    };
+    grid.appendChild(card);
+  }
+}
+
+function showBreedAdvice(){
+  const output=document.getElementById("breedOutput");
+  if(selectedBreeds.size>0){
+    let advices = [];
+    selectedBreeds.forEach(b=>{
+      advices.push(`<strong>${b}:</strong> ${breedData[currentLang][b]}`);
+    });
+    output.innerHTML = advices.join("<br><br>");
+  } else output.innerHTML="";
+}
+
+function renderSymptoms(){
+  const box=document.getElementById("symptomBox");
+  box.innerHTML="";
+  const allSymptoms=new Set();
+  diseaseData[currentLang].forEach(d=>d.symptoms.forEach(s=>allSymptoms.add(s)));
+  allSymptoms.forEach(s=>{box.innerHTML+=`<label><input type="checkbox" value="${s}"> ${s}</label>`;});
+}
+
+function findDisease(){
+  const checked=[...document.querySelectorAll(".symptoms input:checked")].map(cb=>cb.value);
+  const output=document.getElementById("diseaseOutput");
+  output.innerHTML="";
+  if(checked.length===0){output.innerHTML="Please select at least one symptom / Sankhani chizindikiro chimodzi."; return;}
+  let found=false;
+  diseaseData[currentLang].forEach(d=>{
+    const match=checked.every(s=>d.symptoms.includes(s));
+    if(match){
+      found=true;
+      output.innerHTML+=`<strong>Disease / Matenda:</strong> ${d.disease}<br>
+                         <strong>Treatment / Chithandizo:</strong> ${d.treatment}<br>
+                         <strong>Medicines / Mankhwala:</strong> ${d.medicine}<br><br>`;
+    }
+  });
+  output.innerHTML+=found?"<em>⚠️ This tool gives guidance only. Always involve a veterinary officer.</em>":"⚠️ No exact match found / Palibe match yomveka. Please consult a veterinary officer.";
+}
+
+function resetForm(){
+  selectedBreeds.clear();
+  document.querySelectorAll(".breedCard").forEach(c=>c.classList.remove("selected"));
+  renderSymptoms();
+  document.getElementById("breedOutput").innerHTML="";
+  document.getElementById("diseaseOutput").innerHTML="";
+}
+
+function downloadPDF(){
+  const { jsPDF } = window.jspdf;
+  const doc=new jsPDF();
+  doc.setFontSize(14);
+  doc.text("OTECHY Cattle Advisor & Disease Finder (Malawi)",10,20);
+
+  // Selected breeds
+  doc.setFontSize(12);
+  doc.text("Breed Advice / Chitsanzo cha Ng'ombe:",10,40);
+  let y=50;
+  if(selectedBreeds.size>0){
+    selectedBreeds.forEach(b=>{
+      let lines = doc.splitTextToSize(`${b}: ${breedData[currentLang][b]}`,180);
+      doc.text(lines,10,y);
+      y+=lines.length*7+5;
+    });
+  } else {
+    doc.text("N/A",10,y); y+=10;
+  }
+
+  // Disease
+  doc.text("Disease & Medicines / Matenda ndi Mankhwala:",10,y+10);
+  let diseaseText=document.getElementById("diseaseOutput").innerText || "N/A";
+  let diseaseLines = doc.splitTextToSize(diseaseText,180);
+  doc.text(diseaseLines,10,y+20);
+
+  doc.save("OtechyVet_Advice.pdf");
+}
+
+// Initialize
+setLanguage();
+</script>
+
+<!-- Footer -->
+<footer style="background:#2c5282; color:#fff; padding:20px; text-align:center; font-family:Arial, sans-serif; margin-top:30px;">
+  <p style="margin:5px 0;">&copy; 2026 <strong>OtechyVet</strong>. All rights reserved.</p>
+  <p style="margin:5px 0;">
+    Visit us at: 
+    <a href="https://otechy.tiiny.site" target="_blank" style="color:#ffd700; text-decoration:none;">otechy</a>
+  </p>
+  <p style="margin:5px 0; font-size:0.9em;">
+    Your trusted veterinary companion online.
+  </p>
+</footer>
+</body>
+</html>
